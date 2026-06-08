@@ -1,0 +1,12 @@
+dbt_instacart:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      driver: http
+      host: localhost
+      port: 8123
+      user: admin
+      password: "1234"
+      schema: default
+      threads: 4

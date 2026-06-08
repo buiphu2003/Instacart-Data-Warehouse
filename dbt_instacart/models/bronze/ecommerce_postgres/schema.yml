@@ -1,0 +1,105 @@
+version: 2
+
+models:
+  - name: base_ecommerce_categories
+    description: "Staging data cho bảng categories từ E-commerce PostgreSQL"
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: category_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_customers
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: customer_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_suppliers
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: supplier_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_warehouses
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: warehouse_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_employees
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: employee_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_products
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_orders
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_order_items
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+      - name: product_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_payments
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: payment_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_shipments
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: shipment_id
+        tests:
+          - not_null
+
+  - name: base_ecommerce_returns
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: return_id
+        tests:
+          - not_null

@@ -1,0 +1,73 @@
+version: 2
+
+sources:
+  - name: instacart_bronze
+    database: instacart_bronze
+    description: "Dữ liệu thô (Bronze Layer) của Instacart được nạp thẳng vào ClickHouse"
+    tables:
+      - name: orders
+        description: "Thông tin chi tiết về các đơn hàng"
+        
+      - name: products
+        description: "Danh sách sản phẩm"
+        
+      - name: aisles
+        description: "Thông tin các quầy hàng (Aisles)"
+        
+      - name: departments
+        description: "Thông tin các phòng ban/ngành hàng (Departments)"
+        
+      - name: order_products_prior
+        description: "Chi tiết sản phẩm trong các đơn hàng lịch sử (Prior)"
+        
+      - name: order_products_train
+        description: "Chi tiết sản phẩm trong các đơn hàng dùng để huấn luyện (Train)"
+
+  - name: ecommerce_postgres
+    database: ecommerce_postgres
+    description: "Dữ liệu E-commerce lấy từ PostgreSQL thông qua ClickHouse PostgreSQL engine"
+    tables:
+      - name: categories
+        description: "Danh mục sản phẩm phân cấp (có thể chứa danh mục cha/con)"
+        
+      - name: customers
+        description: "Thông tin chi tiết khách hàng và lịch sử thay đổi (SCD Type 2)"
+        
+      - name: employees
+        description: "Hồ sơ nhân viên phụ trách kho và vận hành"
+        
+      - name: order_items
+        description: "Chi tiết từng sản phẩm nằm trong đơn hàng (số lượng, đơn giá, thành tiền)"
+        
+      - name: orders
+        description: "Thông tin tổng quát của đơn hàng E-commerce (trạng thái, tổng giá trị)"
+        loaded_at_field: "order_date"
+        freshness:
+          warn_after: {count: 12, period: hour}
+          error_after: {count: 24, period: hour}
+          
+      - name: payments
+        description: "Thông tin thanh toán của khách hàng cho từng đơn hàng"
+        loaded_at_field: "payment_date"
+        freshness:
+          warn_after: {count: 12, period: hour}
+          error_after: {count: 24, period: hour}
+          
+      - name: products
+        description: "Thông tin hàng hóa, sản phẩm và lịch sử thay đổi giá (SCD Type 2)"
+        
+      - name: returns
+        description: "Ghi nhận các đơn hàng bị trả lại và lý do hoàn trả"
+        
+      - name: shipments
+        description: "Thông tin vận chuyển đơn hàng, hãng vận chuyển và trạng thái giao hàng"
+        loaded_at_field: "shipment_date"
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+          
+      - name: suppliers
+        description: "Danh sách đối tác, nhà cung cấp sản phẩm"
+        
+      - name: warehouses
+        description: "Thông tin danh sách các kho lưu trữ hàng hóa và sức chứa"

@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: fact_orders
+    description: "Bảng Fact giao dịch cấp độ đơn hàng (Order-level Grain), hợp nhất từ Ecommerce và Instacart."
+    columns:
+      - name: order_sk
+        description: "Khóa chính nhân tạo."
+        tests:
+          - unique
+          - not_null
+      - name: customer_sk
+        description: "Khóa ngoại trỏ đến dim_customers. Đối với Instacart là MD5('unknown')."
+        tests:
+          - not_null
+      - name: date_id
+        description: "Khóa ngoại trỏ đến dim_date."
+
+  - name: fact_order_items
+    description: "Bảng Fact giao dịch cấp độ sản phẩm trong đơn hàng (Line-item Grain)."
+    columns:
+      - name: order_item_sk
+        description: "Khóa chính nhân tạo."
+        tests:
+          - unique
+          - not_null
+      - name: order_sk
+        description: "Khóa ngoại trỏ đến fact_orders."
+        tests:
+          - not_null
+      - name: product_sk
+        description: "Khóa ngoại trỏ đến dim_products."
+        tests:
+          - not_null

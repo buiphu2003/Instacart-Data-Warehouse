@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_crm
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=crm_user
+      - POSTGRES_PASSWORD=crm_pass
+      - POSTGRES_DB=crm_db
+    volumes:
+      - ./postgres_init:/docker-entrypoint-initdb.d
+    networks:
+      - data_network
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    environment:
+      - CLICKHOUSE_USER=admin
+      - CLICKHOUSE_PASSWORD=1234
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - data_network
+
+  superset:
+    image: apache/superset:latest
+    container_name: superset_instacart
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=your_very_secure_secret_key_12345
+    depends_on:
+      - clickhouse
+    networks:
+      - data_network
+    user: "root" # Cần chạy bằng quyền root để có thể pip install thêm driver
+    command: >
+      bash -c "
+      pip install clickhouse-connect &&
+      superset db upgrade &&
+      superset fab create-admin --username admin --firstname Admin --lastname Superset --email admin@example.com --password admin &&
+      superset init &&
+      /usr/bin/run-server.sh"
+
+volumes:
+  clickhouse_data:
+
+networks:
+  data_network:
+    driver: bridge

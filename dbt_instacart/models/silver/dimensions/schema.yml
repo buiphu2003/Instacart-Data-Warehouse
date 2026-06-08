@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "Bảng Customer Dimension đã được làm sạch và khử trùng lặp (chỉ lấy bản ghi hiện tại)."
+    columns:
+      - name: customer_id
+        description: "ID duy nhất của khách hàng từ hệ thống E-commerce."
+        tests:
+          - unique
+          - not_null
+      - name: email
+        description: "Email của khách hàng"
+      - name: loyalty_tier
+        description: "Hạng thành viên của khách hàng, đã được chuẩn hóa (Bronze, Silver, Gold, Platinum, Unknown)."
+        tests:
+          - accepted_values:
+              values: ['Bronze', 'Silver', 'Gold', 'Platinum', 'Unknown']
+
+  - name: dim_products
+    description: "Bảng Product Dimension dùng chung (Conformed Dimension), hợp nhất dữ liệu từ E-commerce và Instacart."
+    columns:
+      - name: product_sk
+        description: "Khóa nhân tạo (Surrogate Key) dùng MD5 băm kết hợp source_system và original_product_id để đảm bảo tính duy nhất toàn cục."
+        tests:
+          - unique
+          - not_null
+      - name: source_system
+        description: "Hệ thống nguồn gốc của sản phẩm."
+        tests:
+          - accepted_values:
+              values: ['ecommerce', 'instacart']
+      - name: original_product_id
+        description: "ID gốc của sản phẩm tại hệ thống nguồn."
+      - name: product_name
+        description: "Tên sản phẩm đã được trim khoảng trắng."
+      - name: category_name
+        description: "Tên danh mục sản phẩm (hoặc Department bên Instacart)."
+      - name: sub_category_name
+        description: "Tên danh mục phụ (Aisles bên Instacart), có thể NULL đối với E-commerce."
+      - name: current_price
+        description: "Giá hiện tại của sản phẩm (nếu có)."

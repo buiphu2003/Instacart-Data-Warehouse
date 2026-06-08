@@ -1,0 +1,44 @@
+[0m21:22:18.813092 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000020B83962770>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000020B84C71270>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000020B83CB5810>]}
+
+
+============================== 21:22:18.824249 | 31df1ca0-497d-48c2-b8a4-b37beb844df1 ==============================
+[0m21:22:18.824249 [info ] [MainThread]: Running with dbt=1.11.11
+[0m21:22:18.824249 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'empty': 'None', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\Admin\\.dbt', 'invocation_command': 'dbt init dbt_instacart', 'indirect_selection': 'eager', 'use_colors': 'True', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m21:22:18.832061 [debug] [MainThread]: Starter project path: E:\Data Engineer\DE_Project\Instacart_Sales_Data_Warehouse\venv\lib\site-packages\dbt\include\starter_project
+[0m21:22:18.853492 [info ] [MainThread]: 
+Your new dbt project "dbt_instacart" was created!
+
+For more information on how to configure the profiles.yml file,
+please consult the dbt documentation here:
+
+  https://docs.getdbt.com/docs/configure-your-profile
+
+One more thing:
+
+Need help? Don't hesitate to reach out to us via GitHub issues or on Slack:
+
+  https://community.getdbt.com/
+
+Happy modeling!
+
+[0m21:22:18.855261 [info ] [MainThread]: Setting up your profile.
+[0m21:22:25.637390 [info ] [MainThread]: No sample profile found for clickhouse.
+[0m21:22:25.637390 [debug] [MainThread]: Command `dbt init` succeeded at 21:22:25.637390 after 6.96 seconds
+[0m21:22:25.637390 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000020B83962770>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000020B84CEBD00>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000020B84DC9840>]}
+[0m21:22:25.637390 [debug] [MainThread]: Flushing usage events
+[0m21:22:26.782584 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m22:56:37.716323 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013110EB6740>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013112288490>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000131122882B0>]}
+
+
+============================== 22:56:37.723446 | e177b0a3-4305-4ca6-b255-7951906708eb ==============================
+[0m22:56:37.723446 [info ] [MainThread]: Running with dbt=1.11.11
+[0m22:56:37.723914 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'empty': 'None', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\Admin\\.dbt', 'use_colors': 'True', 'invocation_command': 'dbt test --select bronze', 'indirect_selection': 'eager', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m22:56:37.725924 [error] [MainThread]: Encountered an error:
+Runtime Error
+  No dbt_project.yml found at expected path E:\Data Engineer\DE_Project\Instacart_Sales_Data_Warehouse\dbt_project.yml
+  Verify that each entry within packages.yml (and their transitive dependencies) contains a file named dbt_project.yml
+  
+[0m22:56:37.726921 [debug] [MainThread]: Command `dbt test` failed at 22:56:37.726921 after 0.16 seconds
+[0m22:56:37.727923 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013110EB6740>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013112288580>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x0000013112288550>]}
+[0m22:56:37.728924 [debug] [MainThread]: Flushing usage events
+[0m22:56:45.536326 [debug] [MainThread]: An error was encountered while trying to flush usage events

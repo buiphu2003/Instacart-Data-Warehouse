@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: base_instacart_orders
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+
+  - name: base_instacart_products
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+
+  - name: base_instacart_departments
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: department_id
+        tests:
+          - not_null
+
+  - name: base_instacart_aisles
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: aisle_id
+        tests:
+          - not_null
+
+  - name: base_instacart_order_products_prior
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+      - name: product_id
+        tests:
+          - not_null
+
+  - name: base_instacart_order_products_train
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+      - name: product_id
+        tests:
+          - not_null
