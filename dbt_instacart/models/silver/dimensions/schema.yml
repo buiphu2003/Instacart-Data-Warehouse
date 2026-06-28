@@ -3,40 +3,267 @@ version: 2
 models:
   - name: dim_customers
     description: "Bảng Customer Dimension đã được làm sạch và khử trùng lặp (chỉ lấy bản ghi hiện tại)."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - _source_system
+            - natural_customer_id
     columns:
-      - name: customer_id
-        description: "ID duy nhất của khách hàng từ hệ thống E-commerce."
+      - name: customer_sk
+        description: "Khóa nhân tạo (Surrogate Key) dùng MD5 băm kết hợp source_system và original_customer_id để đảm bảo tính duy nhất toàn cục."
         tests:
           - unique
           - not_null
+      - name: natural_customer_id
+        description: "ID duy nhất của khách hàng từ hệ thống E-commerce."
+        tests:
+          - not_null
       - name: email
         description: "Email của khách hàng"
+        tests:
+          - unique:
+              config:
+                severity: warn
+                where: "email != 'Unknown'"
+      - name: phone
+        description: "Số điện thoại của khách hàng"
+        tests:
+          - not_null
       - name: loyalty_tier
         description: "Hạng thành viên của khách hàng, đã được chuẩn hóa (Bronze, Silver, Gold, Platinum, Unknown)."
         tests:
           - accepted_values:
-              values: ['Bronze', 'Silver', 'Gold', 'Platinum', 'Unknown']
+              values: ["Bronze", "Silver", "Gold", "Platinum", "Unknown"]
 
+  # =================================
+  # test cho dim_products
+  # =================================
   - name: dim_products
     description: "Bảng Product Dimension dùng chung (Conformed Dimension), hợp nhất dữ liệu từ E-commerce và Instacart."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - _source_system
+            - natural_product_id
     columns:
       - name: product_sk
         description: "Khóa nhân tạo (Surrogate Key) dùng MD5 băm kết hợp source_system và original_product_id để đảm bảo tính duy nhất toàn cục."
         tests:
           - unique
           - not_null
-      - name: source_system
+      - name: _source_system
         description: "Hệ thống nguồn gốc của sản phẩm."
         tests:
           - accepted_values:
-              values: ['ecommerce', 'instacart']
-      - name: original_product_id
+              values: ["ecommerce_postgres", "instacart_csv"]
+      - name: natural_product_id
         description: "ID gốc của sản phẩm tại hệ thống nguồn."
+        tests:
+          - not_null
       - name: product_name
         description: "Tên sản phẩm đã được trim khoảng trắng."
+        tests:
+          - not_null
       - name: category_name
         description: "Tên danh mục sản phẩm (hoặc Department bên Instacart)."
+        tests:
+          - not_null
       - name: sub_category_name
         description: "Tên danh mục phụ (Aisles bên Instacart), có thể NULL đối với E-commerce."
+        tests:
+          - not_null
       - name: current_price
         description: "Giá hiện tại của sản phẩm (nếu có)."
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              row_condition: "current_price IS NOT NULL"
+
+  # ======================
+  # test cho dim_warehouse
+  # ======================
+  - name: dim_warehouses
+    description: "Bảng Warehouse Dimension cho hệ thống E-commerce."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - _source_system
+            - natural_warehouse_id
+    columns:
+      - name: warehouse_sk
+        description: "Khóa nhân tạo (Surrogate Key)."
+        tests:
+          - unique
+          - not_null
+      - name: natural_warehouse_id
+        description: "ID gốc của kho."
+        tests:
+          - not_null
+      - name: warehouse_name
+        description: "Tên kho."
+        tests:
+          - not_null
+      - name: warehouse_location
+        description: "Vị trí kho."
+        tests:
+          - not_null
+      - name: capacity
+        description: "Dung lượng kho."
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 100
+
+  # ======================
+  # test cho dim_supplier
+  # ======================
+  - name: dim_suppliers
+    description: "Bảng Supplier Dimension cho hệ thống E-commerce."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - _source_system
+            - natural_supplier_id
+    columns:
+      - name: supplier_sk
+        description: "Khóa nhân tạo (Surrogate Key)."
+        tests:
+          - unique
+          - not_null
+      - name: natural_supplier_id
+        description: "ID gốc của nhà cung cấp."
+        tests:
+          - not_null
+      - name: supplier_name
+        description: "Tên nhà cung cấp."
+        tests:
+          - not_null
+      - name: supplier_email
+        description: "Email của nhà cung cấp."
+        tests:
+          - not_null
+          - unique
+      - name: supplier_phone
+        description: "Số điện thoại của nhà cung cấp."
+        tests:
+          - not_null
+          - unique
+      - name: supplier_country
+        description: "Quốc gia của nhà cung cấp."
+        tests:
+          - not_null
+
+  # ======================
+  # test cho dim_employees
+  # ======================
+  - name: dim_employees
+    description: "Bảng Employee Dimension cho hệ thống E-commerce."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - _source_system
+            - natural_employee_id
+    columns:
+      - name: employee_sk
+        description: "Khóa nhân tạo (Surrogate Key)."
+        tests:
+          - unique
+          - not_null
+      - name: natural_employee_id
+        description: "ID gốc của nhân viên."
+        tests:
+          - not_null
+      - name: first_name
+        description: "Tên nhân viên."
+        tests:
+          - not_null
+      - name: last_name
+        description: "Họ nhân viên."
+        tests:
+          - not_null
+      - name: email
+        description: "Email của nhân viên."
+        tests:
+          - not_null
+          - unique
+      - name: hire_date
+        description: "Ngày bắt đầu làm việc."
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              max_value: today()
+      - name: warehouse_sk
+        description: "Khóa nhân tạo của kho."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_sk
+
+  - name: dim_date
+    description: "Date Dimension tự sinh từ 2020-01-01 đến 2029-12-31 (3653 ngày)"
+    tests:
+      # ① Completeness: phải có đúng 3653 ngày
+      - dbt_expectations.expect_table_row_count_to_equal:
+          value: 3653
+
+    columns:
+      - name: date_id
+        description: "Primary key dạng YYYYMMDD (VD: 20240101)"
+        data_tests:
+          - unique
+          - not_null
+          # ② Range min: ngày đầu tiên phải là 20200101
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 20200101
+              max_value: 20291231
+
+      - name: year
+        description: "Năm (2020–2029)"
+        data_tests:
+          - not_null
+          # ③ Năm phải nằm trong dải hợp lệ
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2029
+
+      - name: quarter
+        description: "Quý (1–4)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+              quote: false
+
+      - name: month
+        description: "Tháng (1–12)"
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+
+      - name: day_of_month
+        description: "Ngày trong tháng (1–31)"
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 31
+
+      - name: day_of_week
+        description: "Ngày trong tuần (1=Mon … 7=Sun theo ClickHouse)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7]
+              quote: false
+
+      - name: is_weekend
+        description: "1 nếu là Thứ 7 hoặc Chủ nhật, 0 nếu ngược lại"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false

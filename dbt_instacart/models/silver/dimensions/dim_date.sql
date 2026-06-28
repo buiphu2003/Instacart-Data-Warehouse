@@ -8,7 +8,11 @@ WITH date_spine AS (
     SELECT
         toDate('2020-01-01') + number AS date_day
     FROM system.numbers
-    LIMIT 3652 -- 10 năm
+    WHERE number < dateDiff(
+        'day',
+        toDate('2020-01-01'),
+        toDate('2030-01-01')
+    )
 )
 
 SELECT

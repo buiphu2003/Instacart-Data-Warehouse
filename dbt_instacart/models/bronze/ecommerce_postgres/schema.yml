@@ -1,105 +1,285 @@
 version: 2
 
 models:
+  # ────────────────────────────────────────────────
+  # ECOMMERCE POSTGRES — Live OLTP source via ClickHouse PG engine
+  # ────────────────────────────────────────────────
+
   - name: base_ecommerce_categories
-    description: "Staging data cho bảng categories từ E-commerce PostgreSQL"
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+    description: "Danh mục sản phẩm phân cấp từ PostgreSQL (có thể chứa danh mục cha/con)"
     columns:
       - name: category_id
-        tests:
+        description: "Mã danh mục duy nhất (PK)"
+        data_tests:
           - not_null
+          - unique
+      - name: category_name
+        description: "Tên danh mục"
+        data_tests:
+          - not_null
+      - name: parent_category_id
+        description: "Mã danh mục cha (null nếu là root category)"
 
   - name: base_ecommerce_customers
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+    description: >
+      Thông tin khách hàng với SCD Type 2 — mỗi khách hàng có thể có nhiều row
+      tương ứng với các thay đổi lịch sử (loyalty_tier, address). Không có unique
+      constraint trên customer_id.
     columns:
       - name: customer_id
-        tests:
+        description: "Mã khách hàng (không unique do SCD2)"
+        data_tests:
           - not_null
-
-  - name: base_ecommerce_suppliers
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
-    columns:
-      - name: supplier_id
-        tests:
+      - name: customer_email
+        description: "Email khách hàng (renamed từ email)"
+        data_tests:
           - not_null
-
-  - name: base_ecommerce_warehouses
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
-    columns:
-      - name: warehouse_id
-        tests:
+      - name: loyalty_tier
+        description: "Hạng khách hàng thân thiết"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['Bronze', 'Silver', 'Gold', 'Platinum']
+      - name: valid_from
+        description: "Thời điểm bắt đầu hiệu lực của record SCD2"
+        data_tests:
+          - not_null
+      - name: is_current
+        description: "Đánh dấu record hiện tại (True/False)"
+        data_tests:
           - not_null
 
   - name: base_ecommerce_employees
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+    description: "Hồ sơ nhân viên phụ trách kho và vận hành"
     columns:
       - name: employee_id
-        tests:
+        description: "Mã nhân viên duy nhất (PK)"
+        data_tests:
           - not_null
-
-  - name: base_ecommerce_products
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
-    columns:
-      - name: product_id
-        tests:
+          - unique
+      - name: employee_email
+        description: "Email nhân viên (renamed từ email)"
+        data_tests:
           - not_null
-
-  - name: base_ecommerce_orders
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
-    columns:
-      - name: order_id
-        tests:
+      - name: warehouse_id
+        description: "Kho phụ trách (FK → base_ecommerce_warehouses)"
+        data_tests:
           - not_null
 
   - name: base_ecommerce_order_items
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+    description: >
+      Chi tiết từng sản phẩm trong đơn hàng.
+      Composite business key = (order_id, product_id).
+      Surrogate key sẽ được tạo ở tầng Silver.
     columns:
       - name: order_id
-        tests:
+        description: "Mã đơn hàng (composite business key)"
+        data_tests:
           - not_null
       - name: product_id
-        tests:
+        description: "Mã sản phẩm (composite business key)"
+        data_tests:
+          - not_null
+      - name: quantity
+        description: "Số lượng đặt mua"
+        data_tests:
+          - not_null
+      - name: unit_price
+        description: "Đơn giá sản phẩm tại thời điểm đặt hàng"
+      - name: subtotal
+        description: "Thành tiền = quantity × unit_price"
+
+  - name: base_ecommerce_orders
+    description: >
+      Thông tin đơn hàng E-commerce với lịch sử thay đổi trạng thái (SCD2 qua Snapshot).
+      Nguồn: ecommerce_orders_snapshot. dbt_scd_id là unique key cho mỗi SCD row.
+    columns:
+      - name: order_id
+        description: "Mã đơn hàng (không unique do SCD2)"
+        data_tests:
+          - not_null
+      - name: customer_id
+        description: "Mã khách hàng đặt hàng"
+        data_tests:
+          - not_null
+      - name: order_created_at
+        description: "Thời điểm tạo đơn hàng (cast từ order_date)"
+        data_tests:
+          - not_null
+      - name: order_status
+        description: "Trạng thái đơn hàng"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+      - name: total_amount
+        description: "Tổng giá trị đơn hàng"
+      - name: dbt_scd_id
+        description: "Unique key của mỗi SCD2 row (do dbt snapshot tạo)"
+        data_tests:
+          - not_null
+          - unique
+      - name: dbt_valid_from
+        description: "Thời điểm bắt đầu hiệu lực của version này"
+        data_tests:
           - not_null
 
   - name: base_ecommerce_payments
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+    description: >
+      Thông tin thanh toán với lịch sử thay đổi trạng thái (SCD2 qua Snapshot).
+      Nguồn: ecommerce_payments_snapshot. dbt_scd_id là unique key cho mỗi SCD row.
     columns:
       - name: payment_id
-        tests:
+        description: "Mã thanh toán (không unique do SCD2)"
+        data_tests:
+          - not_null
+      - name: order_id
+        description: "Mã đơn hàng liên quan"
+        data_tests:
+          - not_null
+      - name: payment_method
+        description: "Phương thức thanh toán"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['CREDIT_CARD', 'PAYPAL', 'BANK_TRANSFER', 'COD']
+      - name: payment_status
+        description: "Trạng thái thanh toán"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['SUCCESS', 'FAILED', 'REFUNDED']
+      - name: dbt_scd_id
+        description: "Unique key của mỗi SCD2 row"
+        data_tests:
+          - not_null
+          - unique
+      - name: dbt_valid_from
+        data_tests:
           - not_null
 
-  - name: base_ecommerce_shipments
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+  - name: base_ecommerce_products
+    description: >
+      Thông tin sản phẩm với lịch sử thay đổi giá (SCD Type 2 từ source).
+      Mỗi sản phẩm có thể có nhiều row tương ứng các lần thay đổi giá / supplier.
     columns:
-      - name: shipment_id
-        tests:
+      - name: product_id
+        description: "Mã sản phẩm (không unique do SCD2)"
+        data_tests:
+          - not_null
+      - name: product_name
+        description: "Tên sản phẩm"
+        data_tests:
+          - not_null
+      - name: valid_from
+        description: "Thời điểm bắt đầu hiệu lực của record SCD2"
+        data_tests:
+          - not_null
+      - name: is_current
+        description: "Đánh dấu record giá hiện tại"
+        data_tests:
           - not_null
 
   - name: base_ecommerce_returns
-    tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 1
+    description: >
+      Ghi nhận các đơn hàng bị trả lại với lịch sử thay đổi trạng thái (SCD2 qua Snapshot).
+      Nguồn: ecommerce_returns_snapshot. dbt_scd_id là unique key cho mỗi SCD row.
     columns:
       - name: return_id
-        tests:
+        description: "Mã yêu cầu hoàn trả (không unique do SCD2)"
+        data_tests:
+          - not_null
+      - name: order_id
+        description: "Mã đơn hàng bị hoàn trả"
+        data_tests:
+          - not_null
+      - name: return_reason
+        description: "Lý do hoàn trả (renamed từ reason)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['DEFECTIVE', 'WRONG_ITEM', 'NOT_AS_EXPECTED', 'CHANGED_MIND']
+      - name: return_status
+        description: "Trạng thái xử lý hoàn trả (renamed từ status)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['PENDING', 'APPROVED', 'REJECTED']
+      - name: dbt_scd_id
+        description: "Unique key của mỗi SCD2 row"
+        data_tests:
+          - not_null
+          - unique
+
+  - name: base_ecommerce_shipments
+    description: >
+      Thông tin vận chuyển đơn hàng với lịch sử thay đổi trạng thái (SCD2 qua Snapshot).
+      Nguồn: ecommerce_shipments_snapshot. dbt_scd_id là unique key cho mỗi SCD row.
+    columns:
+      - name: shipment_id
+        description: "Mã vận chuyển (không unique do SCD2)"
+        data_tests:
+          - not_null
+      - name: order_id
+        description: "Mã đơn hàng liên quan"
+        data_tests:
+          - not_null
+      - name: carrier
+        description: "Hãng vận chuyển"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['FedEx', 'UPS', 'DHL', 'USPS']
+      - name: shipment_status
+        description: "Trạng thái giao hàng (renamed từ status)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['IN_TRANSIT', 'DELIVERED']
+      - name: dbt_scd_id
+        description: "Unique key của mỗi SCD2 row"
+        data_tests:
+          - not_null
+          - unique
+
+  - name: base_ecommerce_suppliers
+    description: "Danh sách đối tác, nhà cung cấp sản phẩm"
+    columns:
+      - name: supplier_id
+        description: "Mã nhà cung cấp duy nhất (PK)"
+        data_tests:
+          - not_null
+          - unique
+      - name: supplier_name
+        description: "Tên nhà cung cấp"
+        data_tests:
+          - not_null
+      - name: contact_email
+        description: "Email liên hệ"
+        data_tests:
+          - not_null
+      - name: country
+        description: "Quốc gia nhà cung cấp"
+        data_tests:
+          - not_null
+
+  - name: base_ecommerce_warehouses
+    description: "Thông tin danh sách các kho lưu trữ hàng hóa và sức chứa"
+    columns:
+      - name: warehouse_id
+        description: "Mã kho duy nhất (PK)"
+        data_tests:
+          - not_null
+          - unique
+      - name: warehouse_name
+        description: "Tên kho"
+        data_tests:
+          - not_null
+      - name: location
+        description: "Địa chỉ kho"
+        data_tests:
+          - not_null
+      - name: capacity
+        description: "Sức chứa tối đa của kho (số lượng đơn vị)"
+        data_tests:
           - not_null

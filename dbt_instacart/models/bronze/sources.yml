@@ -1,73 +1,109 @@
 version: 2
 
 sources:
+  # ──────────────────────────────────────────────────────────
+  # SOURCE 1: INSTACART CSV
+  # Dữ liệu tĩnh từ Kaggle, được load thẳng vào ClickHouse
+  # Không có freshness vì đây là static historical dataset
+  # ──────────────────────────────────────────────────────────
   - name: instacart_bronze
     database: instacart_bronze
-    description: "Dữ liệu thô (Bronze Layer) của Instacart được nạp thẳng vào ClickHouse"
+    description: "Dữ liệu thô (Bronze Layer) của Instacart được nạp thẳng vào ClickHouse từ CSV"
     tables:
-      - name: orders
-        description: "Thông tin chi tiết về các đơn hàng"
-        
-      - name: products
-        description: "Danh sách sản phẩm"
-        
-      - name: aisles
-        description: "Thông tin các quầy hàng (Aisles)"
-        
-      - name: departments
-        description: "Thông tin các phòng ban/ngành hàng (Departments)"
-        
-      - name: order_products_prior
-        description: "Chi tiết sản phẩm trong các đơn hàng lịch sử (Prior)"
-        
-      - name: order_products_train
-        description: "Chi tiết sản phẩm trong các đơn hàng dùng để huấn luyện (Train)"
+      - name: base_instacart_orders
+        description: "Thông tin chi tiết về các đơn hàng Instacart"
 
+      - name: base_instacart_products
+        description: "Danh sách sản phẩm Instacart"
+
+      - name: base_instacart_aisles
+        description: "Thông tin các quầy hàng (Aisles)"
+
+      - name: base_instacart_departments
+        description: "Thông tin các ngành hàng (Departments)"
+
+      - name: base_instacart_order_products_prior
+        description: "Chi tiết sản phẩm trong các đơn hàng lịch sử (Prior set)"
+
+      - name: base_instacart_order_products_train
+        description: "Chi tiết sản phẩm trong các đơn hàng Train set"
+
+  # ──────────────────────────────────────────────────────────
+  # SOURCE 2: ECOMMERCE POSTGRES
+  # Dữ liệu E-commerce live từ PostgreSQL qua ClickHouse PostgreSQL engine
+  # Freshness check được áp dụng cho TẤT CẢ bảng transactional
+  # ──────────────────────────────────────────────────────────
   - name: ecommerce_postgres
     database: ecommerce_postgres
     description: "Dữ liệu E-commerce lấy từ PostgreSQL thông qua ClickHouse PostgreSQL engine"
     tables:
+      # ── Reference / Dimension tables (ít thay đổi, freshness lỏng hơn) ──
+
       - name: categories
         description: "Danh mục sản phẩm phân cấp (có thể chứa danh mục cha/con)"
-        
-      - name: customers
-        description: "Thông tin chi tiết khách hàng và lịch sử thay đổi (SCD Type 2)"
-        
+        loaded_at_field: null  # Static-like reference table — no freshness needed
+
+      - name: suppliers
+        description: "Danh sách đối tác, nhà cung cấp sản phẩm"
+        loaded_at_field: null  # Static-like reference table — no freshness needed
+
+      - name: warehouses
+        description: "Thông tin danh sách các kho lưu trữ hàng hóa và sức chứa"
+        loaded_at_field: null  # Static-like reference table — no freshness needed
+
       - name: employees
         description: "Hồ sơ nhân viên phụ trách kho và vận hành"
-        
-      - name: order_items
-        description: "Chi tiết từng sản phẩm nằm trong đơn hàng (số lượng, đơn giá, thành tiền)"
-        
+        loaded_at_field: "hire_date"
+        freshness:
+          warn_after:  { count: 30, period: day }
+          error_after: { count: 60, period: day }
+
+      # ── SCD2 tables (thay đổi chậm) ──
+
+      - name: customers
+        description: "Thông tin chi tiết khách hàng và lịch sử thay đổi (SCD Type 2)"
+        loaded_at_field: "valid_from"
+        freshness:
+          warn_after:  { count: 48, period: hour }
+          error_after: { count: 72, period: hour }
+
+      - name: products
+        description: "Thông tin hàng hóa, sản phẩm và lịch sử thay đổi giá (SCD Type 2)"
+        loaded_at_field: "valid_from"
+        freshness:
+          warn_after:  { count: 48, period: hour }
+          error_after: { count: 72, period: hour }
+
+      # ── Transactional tables (thay đổi liên tục — freshness chặt) ──
+
       - name: orders
         description: "Thông tin tổng quát của đơn hàng E-commerce (trạng thái, tổng giá trị)"
         loaded_at_field: "order_date"
         freshness:
-          warn_after: {count: 12, period: hour}
-          error_after: {count: 24, period: hour}
-          
+          warn_after:  { count: 12, period: hour }
+          error_after: { count: 24, period: hour }
+
+      - name: order_items
+        description: "Chi tiết từng sản phẩm nằm trong đơn hàng (số lượng, đơn giá, thành tiền)"
+        loaded_at_field: null  # order_items không có timestamp riêng — monitor qua orders
+
       - name: payments
         description: "Thông tin thanh toán của khách hàng cho từng đơn hàng"
         loaded_at_field: "payment_date"
         freshness:
-          warn_after: {count: 12, period: hour}
-          error_after: {count: 24, period: hour}
-          
-      - name: products
-        description: "Thông tin hàng hóa, sản phẩm và lịch sử thay đổi giá (SCD Type 2)"
-        
-      - name: returns
-        description: "Ghi nhận các đơn hàng bị trả lại và lý do hoàn trả"
-        
+          warn_after:  { count: 12, period: hour }
+          error_after: { count: 24, period: hour }
+
       - name: shipments
         description: "Thông tin vận chuyển đơn hàng, hãng vận chuyển và trạng thái giao hàng"
         loaded_at_field: "shipment_date"
         freshness:
-          warn_after: {count: 24, period: hour}
-          error_after: {count: 48, period: hour}
-          
-      - name: suppliers
-        description: "Danh sách đối tác, nhà cung cấp sản phẩm"
-        
-      - name: warehouses
-        description: "Thông tin danh sách các kho lưu trữ hàng hóa và sức chứa"
+          warn_after:  { count: 24, period: hour }
+          error_after: { count: 48, period: hour }
+
+      - name: returns
+        description: "Ghi nhận các đơn hàng bị trả lại và lý do hoàn trả"
+        loaded_at_field: "return_date"
+        freshness:
+          warn_after:  { count: 24, period: hour }
+          error_after: { count: 48, period: hour }

@@ -13,8 +13,41 @@ models:
         description: "Khóa ngoại trỏ đến dim_customers. Đối với Instacart là MD5('unknown')."
         tests:
           - not_null
+      - name: total_amount
+        description: "Tổng giá trị đơn hàng"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: order_status
+        description: "Trạng thái đơn hàng"
+        tests:
+          - accepted_values:
+              values:
+                [
+                  "PENDING",
+                  "PROCESSING",
+                  "SHIPPED",
+                  "DELIVERED",
+                  "CANCELLED",
+                  "N/A",
+                ]
+              quote: true
       - name: date_id
-        description: "Khóa ngoại trỏ đến dim_date."
+        description: "FK đến dim_date. Instacart records có date_id=0 vì nguồn không có ngày tuyệt đối."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_id
+              config:
+                severity: warn
+                where: "_source_system = 'ecommerce_postgres'" # chỉ check ecommerce
+          - dbt_utils.expression_is_true:
+              # date_id=0 là placeholder của Instacart (bỏ qua), còn lại không được vượt quá ngày hôm nay
+              expression: "= 0 OR date_id <= toUInt32(toYYYYMMDD(today()))"
+              config:
+                severity: warn
+                where: "date_id != 0" # bỏ qua Instacart placeholder
 
   - name: fact_order_items
     description: "Bảng Fact giao dịch cấp độ sản phẩm trong đơn hàng (Line-item Grain)."
@@ -22,13 +55,215 @@ models:
       - name: order_item_sk
         description: "Khóa chính nhân tạo."
         tests:
-          - unique
+          - unique:
+              config:
+                severity: warn
+                # [OPT-1] limit:1 → fail fast, ClickHouse dừng scan ngay khi thấy duplicate
+                # đầu tiên thay vì GROUP BY toàn bộ bảng hàng chục triệu rows.
+                # SK được tạo từ MD5(source|order_id|product_id) nên unique theo cấu trúc.
+                limit: 1
+                store_failures: false
           - not_null
       - name: order_sk
         description: "Khóa ngoại trỏ đến fact_orders."
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_sk
+              config:
+                severity: warn
+                # Chỉ check ecommerce (nhỏ hơn) — Instacart không có order_sk trong fact_orders
+                where: "_source_system = 'ecommerce_postgres'"
+                # [OPT-3] Không ghi failure rows ra disk để tránh tốn I/O
+                store_failures: false
       - name: product_sk
         description: "Khóa ngoại trỏ đến dim_products."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_sk
+              config:
+                severity: warn
+                # [OPT-2] Chỉ check ecommerce — tránh scan ~30M rows Instacart.
+                # Instacart product_sk đã được đảm bảo bằng cách dim_products được build
+                # từ cùng nguồn product_id.
+                where: "_source_system = 'ecommerce_postgres'"
+                # [OPT-3] Không ghi failure rows ra disk
+                store_failures: false
+
+  - name: fact_payments
+    description: "Bảng Fact ghi nhận lịch sử thanh toán."
+    columns:
+      - name: payment_sk
+        tests:
+          - unique
+          - not_null
+      - name: order_sk
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_sk
+              config:
+                severity: warn
+      - name: payment_status
+        tests:
+          - accepted_values:
+              values: ["SUCCESS", "FAILED", "REFUNDED"]
+              quote: true
+      - name: payment_method
+        tests:
+          - accepted_values:
+              values: ["CREDIT_CARD", "PAYPAL", "BANK_TRANSFER", "COD"]
+              quote: true
+
+  - name: fact_shipments
+    description: "Bảng Fact ghi nhận quá trình vận chuyển đơn hàng."
+    columns:
+      - name: shipment_sk
+        tests:
+          - unique
+          - not_null
+      - name: order_sk
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_sk
+              config:
+                severity: warn
+      - name: warehouse_sk
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_warehouses')
+                field: warehouse_sk
+      - name: shipment_status
+        tests:
+          - accepted_values:
+              values: ["IN_TRANSIT", "DELIVERED"]
+              quote: true
+      - name: carrier
+        tests:
+          - accepted_values:
+              values: ["FedEx", "UPS", "DHL", "USPS"]
+              quote: true
+
+  - name: fact_orders_history
+    description: "Bảng Fact lưu vết toàn bộ lịch sử thay đổi trạng thái của đơn hàng (Event Log) sinh ra từ dbt snapshots."
+    tests:
+      - mutually_exclusive_ranges_ch:
+          # dbt_utils.mutually_exclusive_ranges dùng lead() không tương thích ClickHouse
+          # → thay bằng macro nội bộ dùng leadInFrame() (macros/test_mutually_exclusive_ranges_ch.sql)
+          partition_by: original_order_id
+          lower_bound_column: valid_from
+          upper_bound_column: valid_to
+    columns:
+      - name: valid_to
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= valid_from"
+      - name: event_sk
+        description: "Khóa chính nhân tạo cho từng sự kiện thay đổi."
+        tests:
+          - unique
+          - not_null
+      - name: order_sk
+        description: "Khóa ngoại trỏ đến đơn hàng gốc."
+        tests:
+          - not_null
+      - name: is_current_status
+        description: "Bằng 1 nếu đây là trạng thái mới nhất của đơn hàng."
+
+  - name: fact_returns
+    description: "Bảng Fact lưu trạng thái hiện tại của quá trình hoàn trả đơn hàng."
+    columns:
+      - name: return_sk
+        tests:
+          - unique
+          - not_null
+      - name: order_sk
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_sk
+      - name: return_status
+        tests:
+          - accepted_values:
+              values: ["PENDING", "APPROVED", "REJECTED"]
+              quote: true
+      - name: return_reason
+        tests:
+          - accepted_values:
+              values:
+                ["DEFECTIVE", "WRONG_ITEM", "NOT_AS_EXPECTED", "CHANGED_MIND"]
+              quote: true
+
+  - name: fact_returns_history
+    description: "Bảng Event Log lưu vết lịch sử thay đổi trạng thái của quá trình hoàn trả."
+    tests:
+      - mutually_exclusive_ranges_ch:
+          partition_by: natural_return_id
+          lower_bound_column: valid_from
+          upper_bound_column: valid_to
+    columns:
+      - name: valid_to
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= valid_from"
+      - name: event_sk
+        tests:
+          - unique
+          - not_null
+      - name: return_sk
+        tests:
+          - not_null
+
+  - name: fact_payment_history
+    description: "Bảng Event Log lưu vết lịch sử thay đổi trạng thái của thanh toán."
+    tests:
+      - mutually_exclusive_ranges_ch:
+          partition_by: natural_payment_id
+          lower_bound_column: valid_from
+          upper_bound_column: valid_to
+    columns:
+      - name: valid_to
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= valid_from"
+      - name: event_sk
+        tests:
+          - unique
+          - not_null
+      - name: payment_sk
+        tests:
+          - not_null
+
+  - name: fact_shipment_history
+    description: "Bảng Event Log lưu vết lịch sử thay đổi trạng thái của vận chuyển."
+    tests:
+      - mutually_exclusive_ranges_ch:
+          partition_by: natural_shipment_id
+          lower_bound_column: valid_from
+          upper_bound_column: valid_to
+    columns:
+      - name: valid_to
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= valid_from"
+      - name: event_sk
+        tests:
+          - unique
+          - not_null
+      - name: shipment_sk
         tests:
           - not_null

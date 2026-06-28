@@ -1,62 +1,146 @@
 version: 2
 
 models:
+  # ────────────────────────────────────────────────
+  # INSTACART CSV — Static Kaggle dataset
+  # ────────────────────────────────────────────────
+
   - name: base_instacart_orders
+    description: "Thông tin chi tiết về các đơn hàng Instacart (nguồn CSV tĩnh)"
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
     columns:
       - name: order_id
-        tests:
+        description: "Mã đơn hàng duy nhất"
+        data_tests:
+          - not_null
+          - unique
+      - name: user_id
+        description: "Mã người dùng đặt hàng"
+        data_tests:
+          - not_null
+      - name: eval_set
+        description: "Tập dữ liệu phân loại (prior / train / test)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["prior", "train", "test"]
+      - name: _source_system
+        description: "Hệ thống nguồn — luôn là 'instacart_csv'"
+        data_tests:
           - not_null
 
   - name: base_instacart_products
+    description: "Danh sách sản phẩm Instacart (nguồn CSV tĩnh)"
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
     columns:
       - name: product_id
-        tests:
+        description: "Mã sản phẩm duy nhất"
+        data_tests:
+          - not_null
+          - unique
+      - name: product_name
+        description: "Tên sản phẩm"
+        data_tests:
+          - not_null
+      - name: aisle_id
+        description: "Mã quầy hàng (FK → base_instacart_aisles)"
+        data_tests:
+          - not_null
+      - name: department_id
+        description: "Mã ngành hàng (FK → base_instacart_departments)"
+        data_tests:
           - not_null
 
   - name: base_instacart_departments
+    description: "Thông tin các ngành hàng (Departments) của Instacart"
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
     columns:
       - name: department_id
-        tests:
+        description: "Mã ngành hàng duy nhất"
+        data_tests:
           - not_null
+          - unique
+      - name: department_name
+        description: "Tên ngành hàng"
+        data_tests:
+          - not_null
+          # ClickHouse String không thể NULL — chỉ có thể rỗng ''.
+          # Phải check thêm not_empty để phát hiện data load sai cột.
+          - dbt_utils.expression_is_true:
+              expression: "!= ''"
 
   - name: base_instacart_aisles
+    description: "Thông tin các quầy hàng (Aisles) của Instacart"
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
     columns:
       - name: aisle_id
-        tests:
+        description: "Mã quầy hàng duy nhất"
+        data_tests:
           - not_null
+          - unique
+      - name: aisle_name
+        description: "Tên quầy hàng"
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "!= ''"
 
   - name: base_instacart_order_products_prior
+    description: "Chi tiết sản phẩm trong các đơn hàng lịch sử (Prior set)"
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
     columns:
       - name: order_id
-        tests:
+        description: "Mã đơn hàng (composite PK với product_id)"
+        data_tests:
           - not_null
       - name: product_id
-        tests:
+        description: "Mã sản phẩm (composite PK với order_id)"
+        data_tests:
           - not_null
+      - name: add_to_cart_order
+        description: "Thứ tự thêm sản phẩm vào giỏ"
+        data_tests:
+          - not_null
+      - name: reordered
+        description: "Sản phẩm có được đặt lại không (0/1)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
 
   - name: base_instacart_order_products_train
+    description: "Chi tiết sản phẩm trong các đơn hàng dùng để huấn luyện (Train set)"
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
     columns:
       - name: order_id
-        tests:
+        description: "Mã đơn hàng (composite PK với product_id)"
+        data_tests:
           - not_null
       - name: product_id
-        tests:
+        description: "Mã sản phẩm (composite PK với order_id)"
+        data_tests:
           - not_null
+      - name: add_to_cart_order
+        description: "Thứ tự thêm sản phẩm vào giỏ"
+        data_tests:
+          - not_null
+      - name: reordered
+        description: "Sản phẩm có được đặt lại không (0/1)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false

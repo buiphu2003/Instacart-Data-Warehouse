@@ -9,4 +9,5 @@ dbt_instacart:
       user: admin
       password: "1234"
       schema: default
-      threads: 4
+      threads: 2                  # Giảm từ 4→2 để tránh OOM khi bảng lớn
+      send_receive_timeout: 900   # Tăng timeout lên 15 phút (mặc định 300s)

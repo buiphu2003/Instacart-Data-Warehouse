@@ -5,8 +5,15 @@
 ) }}
 
 WITH ecom_items AS (
-    SELECT *
+    SELECT 
+        _source_system,
+        order_id,
+        product_id,
+        max(unit_price) AS unit_price,
+        sum(quantity) AS quantity,
+        sum(subtotal) AS subtotal
     FROM {{ ref('base_ecommerce_order_items') }}
+    GROUP BY _source_system, order_id, product_id
 ),
 
 instacart_prior AS (
@@ -26,25 +33,25 @@ instacart_items AS (
 )
 
 SELECT
-    lower(hex(MD5(concat('ecommerce-', toString(coalesce(order_id, 0)), '-', toString(coalesce(product_id, 0)))))) AS order_item_sk,
-    lower(hex(MD5(concat('ecommerce-', toString(coalesce(order_id, 0)))))) AS order_sk,
-    lower(hex(MD5(concat('ecommerce-', toString(coalesce(product_id, 0)))))) AS product_sk,
-    'ecommerce' AS source_system,
+    lower(hex(MD5(concat(toString(_source_system), '|', toString(order_id), '|', toString(product_id))))) AS order_item_sk,
+    lower(hex(MD5(concat(toString(_source_system), '|', toString(order_id))))) AS order_sk,
+    lower(hex(MD5(concat(toString(_source_system), '|', toString(product_id))))) AS product_sk,
+    _source_system,
     coalesce(quantity, 1) AS quantity,
     unit_price,
     subtotal AS total_price,
-    CAST(NULL AS Nullable(UInt16)) AS add_to_cart_order,
-    CAST(NULL AS Nullable(UInt8)) AS is_reordered,
+    CAST(NULL AS Nullable(UInt16)) AS add_to_cart_order,  -- NULL cho ecommerce (chỉ Instacart có)
+    CAST(NULL AS Nullable(UInt8))  AS is_reordered,       -- NULL cho ecommerce (chỉ Instacart có)
     now() AS _silver_loaded_at
 FROM ecom_items
 
 UNION ALL
 
 SELECT
-    lower(hex(MD5(concat('instacart-', toString(coalesce(order_id, 0)), '-', toString(coalesce(product_id, 0)))))) AS order_item_sk,
-    lower(hex(MD5(concat('instacart-', toString(coalesce(order_id, 0)))))) AS order_sk,
-    lower(hex(MD5(concat('instacart-', toString(coalesce(product_id, 0)))))) AS product_sk,
-    'instacart' AS source_system,
+    lower(hex(MD5(concat(toString(_source_system), '|', toString(order_id), '|', toString(product_id))))) AS order_item_sk,
+    lower(hex(MD5(concat(toString(_source_system), '|', toString(order_id))))) AS order_sk,
+    lower(hex(MD5(concat(toString(_source_system), '|', toString(product_id))))) AS product_sk,
+    _source_system,
     1 AS quantity,
     CAST(NULL AS Nullable(Decimal(18,2))) AS unit_price,
     CAST(NULL AS Nullable(Decimal(18,2))) AS total_price,
