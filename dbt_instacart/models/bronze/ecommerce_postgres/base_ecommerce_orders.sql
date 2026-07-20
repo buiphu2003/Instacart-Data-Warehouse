@@ -3,17 +3,30 @@
 -- LAYER   : Bronze
 -- SOURCE  : ecommerce_orders_snapshot (dbt Snapshot — SCD2 of ecommerce.orders)
 -- LINEAGE : ecommerce_postgres.orders → [dbt snapshot] → this model
+-- STRATEGY: incremental — unique_key=dbt_scd_id
+--           Filter: dbt_updated_at > max(_bronze_loaded_at)
+--           Snapshot ghi dbt_updated_at mỗi khi phát hiện thay đổi SCD2
 -- TRANSFORMS:
 --   • Cast order_date → timestamp as order_created_at
 --   • Cast total_amount → Nullable(Decimal(18,2))
 --   • Expose dbt snapshot SCD2 columns (dbt_scd_id, dbt_valid_from/to)
 --   • Add audit metadata: _source_system, _bronze_loaded_at, _bronze_load_date
--- NOTE    : Reads from snapshot (not directly from source) to preserve SCD2 history.
---           dbt_scd_id is the unique key for each SCD row.
 -- ============================================================
+
+{{ config(
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='dbt_scd_id',
+    unique_key='dbt_scd_id',
+    incremental_strategy='delete+insert'
+) }}
 
 with source as (
     select * from {{ ref('ecommerce_orders_snapshot') }}
+    {% if is_incremental() %}
+    -- Chỉ lấy SCD2 rows được snapshot tạo/cập nhật kể từ lần Bronze load trước
+    where dbt_updated_at > (select max(_bronze_loaded_at) from {{ this }})
+    {% endif %}
 ),
 
 renamed as (

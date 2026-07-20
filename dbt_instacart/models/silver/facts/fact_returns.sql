@@ -1,13 +1,27 @@
 {{ config(
-    materialized='table',
-    engine='MergeTree()',
-    order_by='return_sk'
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='return_sk',
+    unique_key='return_sk',
+    incremental_strategy='delete+insert',
+    settings={'allow_nullable_key': 1}
 ) }}
+
+-- ============================================================
+-- MODEL   : fact_returns
+-- LAYER   : Silver
+-- SOURCE  : base_ecommerce_returns (Bronze)
+-- STRATEGY: incremental — unique_key=return_sk (UPSERT current state)
+--           dbt_valid_to IS NULL → chỉ lấy trạng thái hiện tại
+-- ============================================================
 
 WITH returns AS (
     SELECT *
     FROM {{ ref('base_ecommerce_returns') }}
-    WHERE dbt_valid_to IS NULL
+    WHERE dbt_valid_to IS NULL  -- Chỉ current state
+    {% if is_incremental() %}
+    AND _bronze_loaded_at > (SELECT max(_silver_loaded_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT

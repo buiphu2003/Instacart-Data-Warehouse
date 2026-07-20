@@ -8,14 +8,14 @@ version: "1.0.0"
 profile: "dbt_instacart"
 
 # These configurations specify where dbt should look for different types of files.
-model-paths:      ["models"]
-analysis-paths:   ["analyses"]
-test-paths:       ["tests"]
-seed-paths:       ["seeds"]
-macro-paths:      ["macros"]
-snapshot-paths:   ["snapshots"]
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
 
-clean-targets:    # directories to be removed by `dbt clean`
+clean-targets: # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
 
@@ -25,29 +25,28 @@ clean-targets:    # directories to be removed by `dbt clean`
 # ──────────────────────────────────────────────────────────────
 models:
   dbt_instacart:
-
     # ── BRONZE LAYER ──────────────────────────────────────────
     # Raw ingestion zone — minimal transformation, full audit trail.
     # Tables are full-refresh (table) to stay in sync with sources.
     bronze:
-      +schema:        bronze
-      +materialized:  table
-      +engine:        "MergeTree()"
-      +order_by:      "tuple()"
-      +tags:          ['bronze', 'raw']
+      +schema: bronze
+      +materialized: incremental
+      +engine: "MergeTree()"
+      +order_by: "tuple()"
+      +tags: ["bronze", "raw"]
 
       instacart_csv:
-        +tags: ['bronze', 'csv', 'instacart']
+        +tags: ["bronze", "csv", "instacart"]
 
       ecommerce_postgres:
-        +tags: ['bronze', 'postgres', 'ecommerce']
+        +tags: ["bronze", "postgres", "ecommerce"]
 
     # ── SILVER LAYER ──────────────────────────────────────────
     # Cleaned, conformed, business-rule applied.
     silver:
-      +schema:        silver
-      +materialized:  table
-      +tags:          ['silver', 'conformed']
+      +schema: silver
+      +materialized: incremental
+      +tags: ["silver", "conformed"]
       # allow_nullable_key: Cho phép dùng Nullable column làm ORDER BY key trong
       # MergeTree. Cần thiết vì các Surrogate Key (MD5 hash) có thể bị ClickHouse
       # infer là Nullable(String) khi input columns là Nullable.
@@ -57,6 +56,6 @@ models:
     # ── GOLD LAYER ────────────────────────────────────────────
     # Aggregated, business-facing reporting models.
     gold:
-      +schema:        gold
-      +materialized:  table
-      +tags:          ['gold', 'reporting']
+      +schema: gold
+      +materialized: table
+      +tags: ["gold", "reporting"]

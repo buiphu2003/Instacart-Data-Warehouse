@@ -1,13 +1,29 @@
 {{ config(
-    materialized='table',
-    engine='MergeTree()',
-    order_by='shipment_sk'
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='shipment_sk',
+    unique_key='shipment_sk',
+    incremental_strategy='delete+insert',
+    settings={'allow_nullable_key': 1}
 ) }}
+
+-- ============================================================
+-- MODEL   : fact_shipments
+-- LAYER   : Silver
+-- SOURCE  : base_ecommerce_shipments (Bronze)
+-- STRATEGY: incremental — unique_key=shipment_sk (UPSERT current state)
+--           dbt_valid_to IS NULL → chỉ lấy trạng thái hiện tại của shipment
+--           Khi status thay đổi (IN_TRANSIT→DELIVERED), snapshot tạo row mới
+--           → Bronze load row mới → Silver UPSERT đè lên row cũ
+-- ============================================================
 
 WITH shipments AS (
     SELECT *
     FROM {{ ref('base_ecommerce_shipments') }}
-    WHERE dbt_valid_to IS NULL
+    WHERE dbt_valid_to IS NULL  -- Chỉ current state
+    {% if is_incremental() %}
+    AND _bronze_loaded_at > (SELECT max(_silver_loaded_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT

@@ -1,12 +1,28 @@
 {{ config(
-    materialized='table',
-    engine='MergeTree()',
-    order_by='supplier_sk'
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='supplier_sk',
+    unique_key='supplier_sk',
+    incremental_strategy='delete+insert',
+    settings={'allow_nullable_key': 1}
 ) }}
+
+-- ============================================================
+-- MODEL   : dim_suppliers
+-- LAYER   : Silver
+-- SOURCE  : base_ecommerce_suppliers (Bronze)
+-- STRATEGY: incremental — unique_key=supplier_sk
+--           Watermark: _bronze_loaded_at > max(_silver_loaded_at)
+--           Cả hai đều là ClickHouse DateTime → không cần macro xử lý type
+-- ============================================================
 
 WITH suppliers AS (
     SELECT * 
     FROM {{ ref('base_ecommerce_suppliers') }}
+    {% if is_incremental() %}
+    -- Chỉ lấy suppliers mà Bronze vừa load mới kể từ lần Silver chạy trước
+    WHERE _bronze_loaded_at > (SELECT max(_silver_loaded_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT

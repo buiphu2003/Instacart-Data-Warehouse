@@ -1,12 +1,25 @@
 {{ config(
-    materialized='table',
-    engine='MergeTree()',
-    order_by='event_sk'
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='event_sk',
+    unique_key='event_sk',
+    incremental_strategy='delete+insert',
+    settings={'allow_nullable_key': 1}
 ) }}
 
-WITH shipments_history AS (
+-- ============================================================
+-- MODEL   : fact_shipment_history
+-- LAYER   : Silver
+-- SOURCE  : base_ecommerce_shipments (Bronze — SCD2 snapshot data)
+-- STRATEGY: incremental — unique_key=event_sk (append SCD2 events)
+-- ============================================================
+
+WITH ecom_shipments_history AS (
     SELECT *
     FROM {{ ref('base_ecommerce_shipments') }}
+    {% if is_incremental() %}
+    WHERE _bronze_loaded_at > (SELECT max(_silver_loaded_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT
@@ -16,14 +29,10 @@ SELECT
     lower(hex(MD5(concat(toString(_source_system), '|', toString(warehouse_id))))) AS warehouse_sk,
     _source_system,
     shipment_id AS natural_shipment_id,
-    order_id AS natural_order_id,
-    warehouse_id AS natural_warehouse_id,
-    toUInt32(toYYYYMMDD(shipment_date)) AS date_id,
     trim(carrier) AS carrier,
     trim(shipment_status) AS shipment_status,
-    shipment_date,
     CAST(dbt_valid_from AS Nullable(DateTime)) AS valid_from,
     CAST(coalesce(dbt_valid_to, toDateTime('9999-12-31 23:59:59')) AS Nullable(DateTime)) AS valid_to,
     if(dbt_valid_to IS NULL, 1, 0) AS is_current_status,
     now() AS _silver_loaded_at
-FROM shipments_history
+FROM ecom_shipments_history

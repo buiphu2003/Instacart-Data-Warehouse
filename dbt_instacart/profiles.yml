@@ -4,7 +4,7 @@ dbt_instacart:
     dev:
       type: clickhouse
       driver: http
-      host: localhost
+      host: clickhouse
       port: 8123
       user: admin
       password: "1234"

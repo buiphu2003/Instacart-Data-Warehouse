@@ -1,12 +1,25 @@
 {{ config(
-    materialized='table',
-    engine='MergeTree()',
-    order_by='event_sk'
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='event_sk',
+    unique_key='event_sk',
+    incremental_strategy='delete+insert',
+    settings={'allow_nullable_key': 1}
 ) }}
+
+-- ============================================================
+-- MODEL   : fact_returns_history
+-- LAYER   : Silver
+-- SOURCE  : base_ecommerce_returns (Bronze — SCD2 snapshot data)
+-- STRATEGY: incremental — unique_key=event_sk (append SCD2 events)
+-- ============================================================
 
 WITH ecom_returns_history AS (
     SELECT *
     FROM {{ ref('base_ecommerce_returns') }}
+    {% if is_incremental() %}
+    WHERE _bronze_loaded_at > (SELECT max(_silver_loaded_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT

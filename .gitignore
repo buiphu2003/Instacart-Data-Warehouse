@@ -1,0 +1,26 @@
+# ── Python ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+*.pyc
+
+# ── dbt ─────────────────────────────────────────────────────────
+dbt_instacart/target/
+dbt_instacart/dbt_packages/
+dbt_instacart/logs/
+logs/
+
+# ── Environment / Credentials ───────────────────────────────────
+# ⚠️  KHÔNG commit .env — chứa credentials thực
+.env
+# Commit .env.example làm template (không chứa credentials)
+
+# ── Docker ──────────────────────────────────────────────────────
+*.log
+
+# ── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -2,16 +2,32 @@
 -- MODEL   : base_ecommerce_customers
 -- LAYER   : Bronze
 -- SOURCE  : ecommerce_postgres.ecommerce.customers (via ClickHouse PostgreSQL engine)
+-- STRATEGY: incremental — unique_key=customer_id
+--           Filter: updated_at > max(_bronze_loaded_at)
+--           updated_at được cập nhật tự động qua trigger trg_customers_updated_at
+--           khi bất kỳ column nào của customer bị UPDATE (VD: loyalty_tier thay đổi)
 -- TRANSFORMS:
 --   • Minimal renames: email→customer_email, phone→customer_phone,
 --     address→customer_address
---   • SCD Type 2 preserved from source (valid_from, valid_to, is_current)
+--   • SCD1 source: 1 row duy nhất / customer, overwrite khi thay đổi
 --   • Add audit metadata: _source_system, _bronze_loaded_at, _bronze_load_date
--- NOTE    : No single PK on customer_id due to SCD2 multi-row per customer
 -- ============================================================
+
+{{ config(
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='customer_id',
+    unique_key='customer_id',
+    incremental_strategy='delete+insert'
+) }}
 
 with source as (
     select * from {{ source('ecommerce_postgres', 'customers') }}
+    {% if is_incremental() %}
+    -- Macro format watermark thành ISO string tránh type mismatch DateTime>integer
+    -- khi ClickHouse push WHERE clause xuống PostgreSQL engine
+    where updated_at > {{ get_max_bronze_loaded_at(this) }}
+    {% endif %}
 ),
 
 renamed as (

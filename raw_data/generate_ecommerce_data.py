@@ -48,23 +48,14 @@ NUM_CATEGORIES = 20
 # Transaction Data
 TOTAL_ORDERS = 100_000
 BATCH_SIZE = 50_000 # Rút nhỏ batch size lại cho phù hợp
-ERROR_RATE = 0.015
-
-initialized_tables = set()
+ERROR_RATE = 0.0  # Set to 0 to disable intentional errors
 
 # ==========================================
 # DATABASE HELPER (Bắn data trực tiếp vào RAM)
 # ==========================================
 def fast_pg_insert(df: pd.DataFrame, table_name: str, engine, cursor):
-    """Sử dụng Pandas tạo bảng, và io.StringIO kết hợp COPY để bắn data không qua đĩa cứng"""
+    """io.StringIO kết hợp COPY để bắn data không qua đĩa cứng vào bảng ĐÃ TỒN TẠI"""
     if df.empty: return
-    
-    # Lần đầu tiên gọi hàm cho bảng này, ta dùng pandas để gen DDL (CREATE TABLE)
-    if table_name not in initialized_tables:
-        if_exists_action = 'replace' if MODE == 'FULL' else 'append'
-        # Đẩy head(0) để tạo cấu trúc bảng rất nhanh
-        df.head(0).to_sql(name=table_name, schema=SCHEMA_NAME, con=engine, if_exists=if_exists_action, index=False)
-        initialized_tables.add(table_name)
     
     # Bắn data qua RAM buffer bằng COPY
     buffer = io.StringIO()
@@ -83,36 +74,27 @@ def get_random_date(start: datetime, end: datetime, seasonality: bool = False) -
     base_date = start + timedelta(days=random_days)
     
     if seasonality:
-        if random.random() < 0.4: 
+        if random.random() < 0.4:
             month = random.choice([11, 12])
             day = random.randint(1, 28)
-            try: base_date = base_date.replace(month=month, day=day)
-            except ValueError: pass
-        if random.random() < 0.3: 
+            try:
+                candidate = base_date.replace(month=month, day=day)
+                if candidate <= end:  # Chỉ thay thế nếu vẫn trong phạm vi hợp lệ
+                    base_date = candidate
+            except ValueError:
+                pass
+        if random.random() < 0.3:
             while base_date.weekday() < 5:
                 base_date += timedelta(days=1)
-                
-    return base_date + timedelta(seconds=random.randint(0, 86400))
+                if base_date > end:   # Dừng nếu vượt quá end
+                    base_date -= timedelta(days=1)
+                    break
+
+    result = base_date + timedelta(seconds=random.randint(0, 86400))
+    return min(result, end)  # Safety net: đảm bảo không vượt END_DATE
 
 def inject_data_quality_issues(df: pd.DataFrame) -> pd.DataFrame:
-    if len(df) == 0: return df
-    num_errors = int(len(df) * ERROR_RATE)
-    
-    if num_errors > 0:
-        duplicates = df.sample(n=min(num_errors // 3, len(df)))
-        df = pd.concat([df, duplicates], ignore_index=True)
-    
-    cols_to_null = [c for c in df.columns if 'id' not in c.lower()]
-    if cols_to_null and num_errors > 0:
-        for _ in range(num_errors // 3):
-            df.at[random.randint(0, len(df) - 1), random.choice(cols_to_null)] = np.nan
-            
-    if 'email' in df.columns and num_errors > 0:
-        for _ in range(num_errors // 3):
-            row_idx = random.randint(0, len(df) - 1)
-            if pd.notna(df.at[row_idx, 'email']):
-                df.at[row_idx, 'email'] = df.at[row_idx, 'email'].replace('@', 'AT')
-
+    # Disable data quality issues to generate a complete, clean dataset
     return df
 
 # ==========================================
@@ -125,7 +107,7 @@ def generate_categories(engine, cursor):
 
 def generate_suppliers(engine, cursor):
     logger.info("Generating Suppliers...")
-    data = [{'supplier_id': i + 1, 'supplier_name': fake.company(), 'contact_email': fake.company_email(), 'contact_phone': fake.phone_number(), 'country': fake.country()} for i in range(NUM_SUPPLIERS)]
+    data = [{'supplier_id': i + 1, 'supplier_name': fake.company(), 'contact_email': f"supplier{i+1}_{fake.company_email()}", 'contact_phone': f"+{fake.random_number(digits=3)}-sup{i+1}-{fake.random_number(digits=6)}", 'country': fake.country()} for i in range(NUM_SUPPLIERS)]
     fast_pg_insert(pd.DataFrame(data), 'suppliers', engine, cursor)
 
 def generate_warehouses(engine, cursor):
@@ -135,37 +117,29 @@ def generate_warehouses(engine, cursor):
 
 def generate_employees(engine, cursor):
     logger.info("Generating Employees...")
-    data = [{'employee_id': i + 1, 'first_name': fake.first_name(), 'last_name': fake.last_name(), 'email': fake.email(), 'hire_date': fake.date_between(start_date=datetime(2020, 1, 1), end_date=datetime(2023, 1, 1)), 'warehouse_id': random.randint(1, NUM_WAREHOUSES)} for i in range(NUM_EMPLOYEES)]
+    data = [{'employee_id': i + 1, 'first_name': fake.first_name(), 'last_name': fake.last_name(), 'email': f"emp{i+1}_{fake.email()}", 'hire_date': fake.date_between(start_date=datetime(2020, 1, 1), end_date=datetime(2023, 1, 1)), 'warehouse_id': random.randint(1, NUM_WAREHOUSES)} for i in range(NUM_EMPLOYEES)]
     fast_pg_insert(pd.DataFrame(data), 'employees', engine, cursor)
 
 def generate_customers(engine, cursor):
-    logger.info("Generating Customers (SCD2)...")
+    logger.info("Generating Customers (SCD1)...")
     customers = []
     tiers = ['Bronze', 'Silver', 'Gold', 'Platinum']
     for i in range(1, NUM_CUSTOMERS + 1):
         created_at = get_random_date(datetime(2020, 1, 1), START_DATE)
-        c = {'customer_id': i, 'first_name': fake.first_name(), 'last_name': fake.last_name(), 'email': fake.email(), 'phone': fake.phone_number(), 'address': fake.address().replace('\n', ', '), 'loyalty_tier': 'Bronze', 'valid_from': created_at, 'valid_to': datetime(9999, 12, 31), 'is_current': True}
+        email = f"user{i}_{fake.email()}"
+        phone = f"+{fake.random_number(digits=3)}-{i}-{fake.random_number(digits=7)}"
+        c = {'customer_id': i, 'first_name': fake.first_name(), 'last_name': fake.last_name(), 'email': email, 'phone': phone, 'address': fake.address().replace('\n', ', '), 'loyalty_tier': 'Bronze', 'valid_from': created_at, 'valid_to': datetime(9999, 12, 31), 'is_current': True}
         customers.append(c)
-        if random.random() < 0.2:
-            change_date = get_random_date(created_at, END_DATE)
-            customers[-1]['valid_to'] = change_date
-            customers[-1]['is_current'] = False
-            customers.append({**c, 'address': fake.address().replace('\n', ', ') if random.random() < 0.5 else c['address'], 'loyalty_tier': random.choice(tiers[1:]), 'valid_from': change_date, 'valid_to': datetime(9999, 12, 31), 'is_current': True})
     df = inject_data_quality_issues(pd.DataFrame(customers))
     fast_pg_insert(df, 'customers', engine, cursor)
 
 def generate_products(engine, cursor):
-    logger.info("Generating Products (SCD2)...")
+    logger.info("Generating Products (SCD1)...")
     products = []
     for i in range(1, NUM_PRODUCTS + 1):
         created_at = get_random_date(datetime(2020, 1, 1), START_DATE)
         p = {'product_id': i, 'product_name': fake.catch_phrase(), 'category_id': random.randint(1, NUM_CATEGORIES), 'supplier_id': random.randint(1, NUM_SUPPLIERS), 'price': round(random.uniform(10.0, 500.0), 2), 'valid_from': created_at, 'valid_to': datetime(9999, 12, 31), 'is_current': True}
         products.append(p)
-        if random.random() < 0.3:
-            change_date = get_random_date(START_DATE, END_DATE)
-            products[-1]['valid_to'] = change_date
-            products[-1]['is_current'] = False
-            products.append({**p, 'price': round(p['price'] * random.uniform(0.9, 1.2), 2), 'supplier_id': random.randint(1, NUM_SUPPLIERS) if random.random() < 0.1 else p['supplier_id'], 'valid_from': change_date, 'valid_to': datetime(9999, 12, 31), 'is_current': True})
     df = inject_data_quality_issues(pd.DataFrame(products))
     fast_pg_insert(df, 'products', engine, cursor)
 
@@ -173,8 +147,15 @@ def generate_transactions(engine, cursor):
     logger.info(f"Generating Transactions: {TOTAL_ORDERS} orders in chunks of {BATCH_SIZE}...")
     
     order_id_counter, payment_id_counter, shipment_id_counter, return_id_counter = 1, 1, 1, 1
-    valid_product_ids = np.arange(1, NUM_PRODUCTS + 1)
-    
+
+    # Load giá sản phẩm thật từ DB để unit_price trong order_items khớp với products table
+    logger.info("Loading product prices from DB...")
+    with engine.connect() as conn:
+        result = conn.execute(text(f"SELECT product_id, price FROM {SCHEMA_NAME}.products"))
+        product_price_map = {row[0]: float(row[1]) for row in result}
+    valid_product_ids = list(product_price_map.keys())
+    logger.info(f"Loaded {len(valid_product_ids)} product prices.")
+
     for chunk_num in range(TOTAL_ORDERS // BATCH_SIZE):
         st = time.time()
         orders, order_items, payments, shipments, returns = [], [], [], [], []
@@ -191,13 +172,15 @@ def generate_transactions(engine, cursor):
             
             total_amount = 0
             for _ in range(random.randint(3, 5)):
-                price = round(random.uniform(10.0, 500.0), 2)
+                product_id = random.choice(valid_product_ids)
+                # Dùng giá thật từ products table, đảm bảo nhất quán
+                unit_price = product_price_map[product_id]
                 qty = random.randint(1, 3)
-                subtotal = qty * price
+                subtotal = round(qty * unit_price, 2)  # Round để tránh lỗi float
                 total_amount += subtotal
-                order_items.append({'order_id': order_id_counter, 'product_id': random.choice(valid_product_ids), 'quantity': qty, 'unit_price': price, 'subtotal': subtotal})
+                order_items.append({'order_id': order_id_counter, 'product_id': product_id, 'quantity': qty, 'unit_price': unit_price, 'subtotal': subtotal})
             
-            orders[-1]['total_amount'] = total_amount
+            orders[-1]['total_amount'] = round(total_amount, 2)  # Round tổng để khớp với SUM(subtotal)
             
             payment_status = 'SUCCESS' if status != 'CANCELLED' else random.choice(['FAILED', 'REFUNDED'])
             payments.append({'payment_id': payment_id_counter, 'order_id': order_id_counter, 'payment_method': random.choice(['CREDIT_CARD', 'PAYPAL', 'BANK_TRANSFER', 'COD']), 'amount': total_amount, 'payment_date': order_date + timedelta(minutes=random.randint(1, 60)), 'status': payment_status})
@@ -236,18 +219,18 @@ def add_constraints(conn, cursor):
         "ALTER TABLE ecommerce.shipments ADD PRIMARY KEY (shipment_id);",
         "ALTER TABLE ecommerce.returns ADD PRIMARY KEY (return_id);",
         
-        # Lưu ý: customers và products đang có dữ liệu SCD2 (trùng ID) nên không thể đặt PK đơn giản trên customer_id/product_id
-        # "ALTER TABLE ecommerce.customers ADD PRIMARY KEY (customer_id);",
-        # "ALTER TABLE ecommerce.products ADD PRIMARY KEY (product_id);",
+        # Đã cập nhật thành dữ liệu SCD1 nên có thể thiết lập khóa chính
+        "ALTER TABLE ecommerce.customers ADD PRIMARY KEY (customer_id);",
+        "ALTER TABLE ecommerce.products ADD PRIMARY KEY (product_id);",
 
         # Khóa ngoại
         "ALTER TABLE ecommerce.categories ADD CONSTRAINT fk_cat_parent FOREIGN KEY (parent_category_id) REFERENCES ecommerce.categories(category_id);",
         "ALTER TABLE ecommerce.employees ADD CONSTRAINT fk_emp_wh FOREIGN KEY (warehouse_id) REFERENCES ecommerce.warehouses(warehouse_id);",
-        # "ALTER TABLE ecommerce.products ADD CONSTRAINT fk_prod_cat FOREIGN KEY (category_id) REFERENCES ecommerce.categories(category_id);",
-        # "ALTER TABLE ecommerce.products ADD CONSTRAINT fk_prod_sup FOREIGN KEY (supplier_id) REFERENCES ecommerce.suppliers(supplier_id);",
-        # "ALTER TABLE ecommerce.orders ADD CONSTRAINT fk_ord_cust FOREIGN KEY (customer_id) REFERENCES ecommerce.customers(customer_id);",
+        "ALTER TABLE ecommerce.products ADD CONSTRAINT fk_prod_cat FOREIGN KEY (category_id) REFERENCES ecommerce.categories(category_id);",
+        "ALTER TABLE ecommerce.products ADD CONSTRAINT fk_prod_sup FOREIGN KEY (supplier_id) REFERENCES ecommerce.suppliers(supplier_id);",
+        "ALTER TABLE ecommerce.orders ADD CONSTRAINT fk_ord_cust FOREIGN KEY (customer_id) REFERENCES ecommerce.customers(customer_id);",
         "ALTER TABLE ecommerce.order_items ADD CONSTRAINT fk_oi_ord FOREIGN KEY (order_id) REFERENCES ecommerce.orders(order_id);",
-        # "ALTER TABLE ecommerce.order_items ADD CONSTRAINT fk_oi_prod FOREIGN KEY (product_id) REFERENCES ecommerce.products(product_id);",
+        "ALTER TABLE ecommerce.order_items ADD CONSTRAINT fk_oi_prod FOREIGN KEY (product_id) REFERENCES ecommerce.products(product_id);",
         "ALTER TABLE ecommerce.payments ADD CONSTRAINT fk_pay_ord FOREIGN KEY (order_id) REFERENCES ecommerce.orders(order_id);",
         "ALTER TABLE ecommerce.shipments ADD CONSTRAINT fk_ship_ord FOREIGN KEY (order_id) REFERENCES ecommerce.orders(order_id);",
         "ALTER TABLE ecommerce.shipments ADD CONSTRAINT fk_ship_wh FOREIGN KEY (warehouse_id) REFERENCES ecommerce.warehouses(warehouse_id);",
@@ -277,6 +260,16 @@ def main():
     conn.autocommit = True
     cursor = conn.cursor()
 
+    if MODE == 'FULL':
+        logger.info("Chế độ FULL: Xóa sạch dữ liệu cũ trong các bảng để tránh trùng lặp ID...")
+        tables = ['returns', 'shipments', 'payments', 'order_items', 'orders', 
+                  'products', 'customers', 'employees', 'warehouses', 'suppliers', 'categories']
+        for table in tables:
+            try:
+                cursor.execute(f"TRUNCATE TABLE {SCHEMA_NAME}.{table} CASCADE;")
+            except Exception as e:
+                logger.warning(f"Bỏ qua truncate bảng {table} (có thể chưa tồn tại): {e}")
+
     generate_categories(engine, cursor)
     generate_suppliers(engine, cursor)
     generate_warehouses(engine, cursor)
@@ -286,7 +279,7 @@ def main():
     
     generate_transactions(engine, cursor)
 
-    # Thêm Khóa chính và Khóa ngoại vào PostgreSQL
+    # Thêm Khóa chính và Khóa ngoại sau khi đã load dữ liệu
     add_constraints(conn, cursor)
 
     cursor.close()

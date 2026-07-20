@@ -1,12 +1,27 @@
 {{ config(
-    materialized='table',
-    engine='MergeTree()',
-    order_by='employee_sk'
+    materialized='incremental',
+    engine='ReplacingMergeTree()',
+    order_by='employee_sk',
+    unique_key='employee_sk',
+    incremental_strategy='delete+insert',
+    settings={'allow_nullable_key': 1}
 ) }}
+
+-- ============================================================
+-- MODEL   : dim_employees
+-- LAYER   : Silver
+-- SOURCE  : base_ecommerce_employees (Bronze)
+-- STRATEGY: incremental — unique_key=employee_sk
+--           Watermark: _bronze_loaded_at > max(_silver_loaded_at)
+-- ============================================================
 
 WITH employees AS (
     SELECT *
     FROM {{ ref('base_ecommerce_employees') }}
+    {% if is_incremental() %}
+    -- Chỉ lấy employees mà Bronze vừa load mới kể từ lần Silver chạy trước
+    WHERE _bronze_loaded_at > (SELECT max(_silver_loaded_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT
